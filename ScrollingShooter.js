@@ -1,13 +1,4 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 "use strict";
-
-/* Classes and Libraries */
-const Game = require('./game');
-const Vector = require('./vector');
-const Camera = require('./camera');
-const Player = require('./player');
-const BulletPool = require('./bullet_pool');
-
 
 /* Global variables */
 var canvas = document.getElementById('screen');
@@ -18,79 +9,74 @@ var input = {
   left: false,
   right: false
 }
+
+//Initialize Objects
 var camera = new Camera(canvas);
 var bullets = new BulletPool(10);
 var missiles = [];
 var player = new Player(bullets, missiles);
+
+//Initialize Html
+var instructionsDiv = document.getElementById("instructionsDiv");
+instructionsDiv.innerHTML = "Use... <br>W-A-S-D or the arrow keys to move <br>Spacebar to fire your weapons <br>p to pause the game";
 
 /**
  * @function onkeydown
  * Handles keydown events
  */
 window.onkeydown = function(event) {
-  switch(event.key) {
-    case "ArrowUp":
-    case "w":
-      input.up = true;
-      event.preventDefault();
-      break;
-    case "ArrowDown":
-    case "s":
-      input.down = true;
-      event.preventDefault();
-      break;
-    case "ArrowLeft":
-    case "a":
-      input.left = true;
-      event.preventDefault();
-      break;
-    case "ArrowRight":
-    case "d":
-      input.right = true;
-      event.preventDefault();
-      break;
-  }
+    switch(event.key) {
+        case "ArrowUp":
+        case "w":
+            input.up = true;
+            event.preventDefault();
+            break;
+        case "ArrowDown":
+        case "s":
+            input.down = true;
+            event.preventDefault();
+            break;
+        case "ArrowLeft":
+        case "a":
+            input.left = true;
+            event.preventDefault();
+            break;
+        case "ArrowRight":
+        case "d":
+            input.right = true;
+            event.preventDefault();
+            break;
+    }
 }
 
 /**
  * @function onkeyup
  * Handles keydown events
  */
-window.onkeyup = function(event) {
-  switch(event.key) {
-    case "ArrowUp":
-    case "w":
-      input.up = false;
-      event.preventDefault();
-      break;
-    case "ArrowDown":
-    case "s":
-      input.down = false;
-      event.preventDefault();
-      break;
-    case "ArrowLeft":
-    case "a":
-      input.left = false;
-      event.preventDefault();
-      break;
-    case "ArrowRight":
-    case "d":
-      input.right = false;
-      event.preventDefault();
-      break;
-  }
+window.onkeyup = function (event) {
+    switch (event.key) {
+        case "ArrowUp":
+        case "w":
+            input.up = false;
+            event.preventDefault();
+            break;
+        case "ArrowDown":
+        case "s":
+            input.down = false;
+            event.preventDefault();
+            break;
+        case "ArrowLeft":
+        case "a":
+            input.left = false;
+            event.preventDefault();
+            break;
+        case "ArrowRight":
+        case "d":
+            input.right = false;
+            event.preventDefault();
+            break;
+    }
 }
-
-/**
- * @function masterLoop
- * Advances the game in sync with the refresh rate of the screen
- * @param {DOMHighResTimeStamp} timestamp the current time
- */
-var masterLoop = function(timestamp) {
-  game.loop(timestamp);
-  window.requestAnimationFrame(masterLoop);
-}
-masterLoop(performance.now());
 
 /**
  * @function update
@@ -185,20 +171,6 @@ function renderGUI(elapsedTime, ctx) {
   // TODO: Render the GUI
 }
 
-},{"./bullet_pool":2,"./camera":3,"./game":4,"./player":6,"./vector":8}],2:[function(require,module,exports){
-"use strict";
-
-/**
- * @module BulletPool
- * A class for managing bullets in-game
- * We use a Float32Array to hold our bullet info,
- * as this creates a single memory buffer we can
- * iterate over, minimizing cache misses.
- * Values stored are: positionX, positionY, velocityX,
- * velocityY in that order.
- */
-module.exports = exports = BulletPool;
-
 /**
  * @constructor BulletPool
  * Creates a BulletPool of the specified size
@@ -218,13 +190,13 @@ function BulletPool(maxSize) {
  * @param {Vector} velocity the bullet's velocity
 */
 BulletPool.prototype.add = function(position, velocity) {
-  if(this.end < this.max) {
-    this.pool[4*this.end] = position.x;
-    this.pool[4*this.end+1] = position.y;
-    this.pool[4*this.end+2] = velocity.x;
-    this.pool[4*this.end+3] = velocity.y;
-    this.end++;
-  }
+    if(this.end < this.max) {
+        this.pool[4*this.end] = position.x;
+        this.pool[4*this.end+1] = position.y;
+        this.pool[4*this.end+2] = velocity.x;
+        this.pool[4*this.end+3] = velocity.y;
+        this.end++;
+    }
 }
 
 /**
@@ -284,18 +256,6 @@ BulletPool.prototype.render = function(elapsedTime, ctx) {
   ctx.restore();
 }
 
-},{}],3:[function(require,module,exports){
-"use strict";
-
-/* Classes and Libraries */
-const Vector = require('./vector');
-
-/**
- * @module Camera
- * A class representing a simple camera
- */
-module.exports = exports = Camera;
-
 /**
  * @constructor Camera
  * Creates a camera
@@ -324,12 +284,12 @@ Camera.prototype.update = function(target) {
  * @return true if target is on-screen, false if not
  */
 Camera.prototype.onScreen = function(target) {
-  return (
-     target.x > this.x &&
-     target.x < this.x + this.width &&
-     target.y > this.y &&
-     target.y < this.y + this.height
-   );
+    return (
+       target.x > this.x &&
+       target.x < this.x + this.width &&
+       target.y > this.y &&
+       target.y < this.y + this.height
+     );
 }
 
 /**
@@ -351,14 +311,6 @@ Camera.prototype.toScreenCoordinates = function(worldCoordinates) {
 Camera.prototype.toWorldCoordinates = function(screenCoordinates) {
   return Vector.add(screenCoordinates, this);
 }
-
-},{"./vector":8}],4:[function(require,module,exports){
-"use strict";
-
-/**
- * @module exports the Game class
- */
-module.exports = exports = Game;
 
 /**
  * @constructor Game
@@ -410,21 +362,8 @@ Game.prototype.loop = function(newTime) {
   this.frontCtx.drawImage(this.backBuffer, 0, 0);
 }
 
-},{}],5:[function(require,module,exports){
-"use strict";
-
-/* Classes and Libraries */
-const Vector = require('./vector');
-const SmokeParticles = require('./smoke_particles');
-
 /* Constants */
 const MISSILE_SPEED = 8;
-
-/**
- * @module Missile
- * A class representing a player's missile
- */
-module.exports = exports = Missile;
 
 /**
  * @constructor Missile
@@ -487,22 +426,9 @@ Missile.prototype.render = function(elapsedTime, ctx) {
   this.smokeParticles.render(elapsedTime, ctx);
 }
 
-},{"./smoke_particles":7,"./vector":8}],6:[function(require,module,exports){
-"use strict";
-
-/* Classes and Libraries */
-const Vector = require('./vector');
-const Missile = require('./missile');
-
 /* Constants */
 const PLAYER_SPEED = 5;
 const BULLET_SPEED = 10;
-
-/**
- * @module Player
- * A class representing a player's helicopter
- */
-module.exports = exports = Player;
 
 /**
  * @constructor Player
@@ -517,7 +443,7 @@ function Player(bullets, missiles) {
   this.position = {x: 200, y: 200};
   this.velocity = {x: 0, y: 0};
   this.img = new Image()
-  this.img.src = 'assets/tyrian.shp.007D3C.png';
+  this.img.src = 'assets/tyrian.shp.007D3C.Edit.png';
 }
 
 /**
@@ -590,16 +516,6 @@ Player.prototype.fireMissile = function() {
     this.missileCount--;
   }
 }
-
-},{"./missile":5,"./vector":8}],7:[function(require,module,exports){
-"use strict";
-
-/**
- * @module SmokeParticles
- * A class for managing a particle engine that
- * emulates a smoke trail
- */
-module.exports = exports = SmokeParticles;
 
 /**
  * @constructor SmokeParticles
@@ -697,24 +613,6 @@ SmokeParticles.prototype.render = function(elapsedTime, ctx) {
   }
 }
 
-},{}],8:[function(require,module,exports){
-"use strict";
-
-/**
- * @module Vector
- * A library of vector functions.
- */
-module.exports = exports = {
-  add: add,
-  subtract: subtract,
-  scale: scale,
-  rotate: rotate,
-  dotProduct: dotProduct,
-  magnitude: magnitude,
-  normalize: normalize
-}
-
-
 /**
  * @function rotate
  * Scales a vector
@@ -794,4 +692,13 @@ function normalize(a) {
   return {x: a.x / mag, y: a.y / mag};
 }
 
-},{}]},{},[1]);
+/**
+ * @function masterLoop
+ * Advances the game in sync with the refresh rate of the screen
+ * @param {DOMHighResTimeStamp} timestamp the current time
+ */
+var masterLoop = function (timestamp) {
+    game.loop(timestamp);
+    window.requestAnimationFrame(masterLoop);
+}
+masterLoop(performance.now());
