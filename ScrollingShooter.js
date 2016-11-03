@@ -1,24 +1,79 @@
 "use strict";
 
+
+///TableOfContents///
+//key functions
+//update 
+//render
+//renderHUD
+//renderworld
+//renderGUI
+//fuel
+//bulletpool
+//laserPool
+//camera
+//game
+//missile
+//player
+//smokeparticles
+//scale
+//add
+//subtract
+//rotate
+//dotProduct
+//magnitude
+//normalize
+//UpdateTimers
+//GameOver
+//masterloop
+
 /* Global variables */
 var canvas = document.getElementById('screen');
 var game = new Game(canvas, update, render);
+var overlay = new Image();
+overlay.src = 'assets/Overlay.png';
+var gasCan = new Image();
+gasCan.src = 'assets/GasCan.png';
+var life = new Image();
+life.src = 'assets/Life.png';
+var timeSinceLastBullet = 0;
+var timeSinceLastFrame = 0;
+var framesThisSecond = 0;
+var tenthSecond = 0;
+var oneSecond = 0;
+var fiveSeconds = 0;
+var timeOnLevel = 0;
+var score = 0;
+var level = 1;
+var lives = 3;
+var gameOverFlag = false;
 var input = {
-  up: false,
-  down: false,
-  left: false,
-  right: false
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    space: false,
+    f: false,
+    p: false
 }
 
 //Initialize Objects
 var camera = new Camera(canvas);
-var bullets = new BulletPool(10);
+var bullets = new BulletPool(10, 500);
+var lasers = new LaserPool(10);
 var missiles = [];
 var player = new Player(bullets, missiles);
+var fuel = new Fuel();
 
 //Initialize Html
 var instructionsDiv = document.getElementById("instructionsDiv");
-instructionsDiv.innerHTML = "Use... <br>W-A-S-D or the arrow keys to move <br>Spacebar to fire your weapons <br>p to pause the game";
+instructionsDiv.innerHTML = "<b>W-A-S-D</b> or the arrow keys to move <br><b>Spacebar</b> to fire your primary weapon <br>'<b>F</b>' to fire your secondary weapon <br>'<b>P</b>' to pause the game";
+var instructionsDiv2 = document.getElementById("instructionsDiv2");
+instructionsDiv2.innerHTML = ("&#8226 Each enemy killed boosts your score and increases your attack speed permanently <br>&#8226 Grab powerups to increase weapon strength <br>&#8226 Clear all enemies to advance to the next level <br>&#8226 Run out of fuel or run out of lives and it's game over");
+var messageDiv = document.getElementById("messageDiv");
+var fpsDiv = document.getElementById("fpsDiv");
+var scoreDiv = document.getElementById("scoreDiv");
+var levelDiv = document.getElementById("levelDiv");
 
 /**
  * @function onkeydown
@@ -44,6 +99,19 @@ window.onkeydown = function(event) {
         case "ArrowRight":
         case "d":
             input.right = true;
+            event.preventDefault();
+            break;
+        case "Space":
+        case ' ':
+            input.space = true;
+            event.preventDefault();
+            break;
+        case 'f':
+            input.f = true;
+            event.preventDefault();
+            break;
+        case 'p':
+            input.p = true;
             event.preventDefault();
             break;
     }
@@ -75,6 +143,15 @@ window.onkeyup = function (event) {
             input.right = false;
             event.preventDefault();
             break;
+        case "Space":
+        case ' ':
+            input.space = false;
+            event.preventDefault();
+            break;
+        case 'f':
+            input.f = false;
+            event.preventDefault();
+            break;
     }
 }
 
@@ -88,6 +165,32 @@ window.onkeyup = function (event) {
  */
 function update(elapsedTime) {
 
+    //Update FPS counter
+    framesThisSecond++;
+    timeSinceLastFrame += elapsedTime;
+
+    //Update Timers
+    UpdateTimers(elapsedTime);
+
+    //Update fuel
+    fuel.update(elapsedTime);
+
+    //Determine if a laser should be fired
+    if (input.f && lasers.fireable)
+    {
+        var veloc = { x: 0, y: -8 };
+        lasers.add(player.position, veloc);
+    }
+
+    //Determine if a bullet should be fired
+    if (input.space && timeSinceLastBullet > bullets.rateOfFire)
+    {
+        var veloc = {x: 0, y: -8};
+        player.bullets.add(player.position, veloc);
+        timeSinceLastBullet = 0;
+    }
+    timeSinceLastBullet += elapsedTime;
+
   // update the player
   player.update(elapsedTime, input);
 
@@ -98,6 +201,12 @@ function update(elapsedTime) {
   bullets.update(elapsedTime, function(bullet){
     if(!camera.onScreen(bullet)) return true;
     return false;
+  });
+
+  //Update lasers
+  lasers.update(elapsedTime, function (laser) {
+      if (!camera.onScreen(laser)) return true;
+      return false;
   });
 
   // Update missiles
@@ -111,6 +220,17 @@ function update(elapsedTime) {
   markedForRemoval.forEach(function(index){
     missiles.splice(index, 1);
   });
+
+  //Check player hp
+  if(player.hp <= 0)
+  {
+      lives--;
+      //Check if it's game over
+      if(lives == 0)
+      {
+          GameOver();
+      }
+  }
 }
 
 /**
@@ -120,7 +240,8 @@ function update(elapsedTime) {
   * the number of milliseconds passed since the last frame.
   * @param {CanvasRenderingContext2D} ctx the context to render to
   */
-function render(elapsedTime, ctx) {
+function render(elapsedTime, ctx)
+{
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, 1024, 786);
 
@@ -136,9 +257,70 @@ function render(elapsedTime, ctx) {
   renderWorld(elapsedTime, ctx);
   ctx.restore();
 
+  //Render HUD
+  renderHUD(elapsedTime, ctx);
+
   // Render the GUI without transforming the
   // coordinate system
   renderGUI(elapsedTime, ctx);
+}
+
+
+//Renders the HUD of the game world
+function renderHUD(elapsedTime, ctx)
+{
+    //Overlay
+    ctx.drawImage(overlay, 0, 0);
+
+    //Secondary fire recharge bar
+    ctx.strokeStyle = 'white';
+    ctx.rect(8, 600, 12, 80);
+    ctx.stroke();
+
+    //Secondary fire symbol
+    ctx.beginPath();
+    ctx.moveTo(14, 705);
+    ctx.lineTo(24, 695);
+    ctx.arc(14, 695, 10, 0, Math.PI, true);
+    ctx.closePath();
+    ctx.fillStyle = lasers.laserColor;
+    ctx.fill();
+
+    //Fuel bar
+    ctx.strokeStyle = 'white';
+    ctx.rect(40, 600, 12, 80);
+    ctx.stroke();
+
+    //Fuel can
+    ctx.drawImage(gasCan, 27, 675);
+
+    //Fuel meter
+    fuel.render(ctx);
+
+    //2nd Weapon cooldown meter
+    lasers.renderMeter(ctx);
+
+    //Score and level
+    scoreDiv.innerHTML = score;
+    levelDiv.innerHTML = level;
+
+    //Lives
+    for(var i = 1; i <= lives; i++)
+    {
+        ctx.drawImage(life, ((i * 20) - 19), 520);
+    }
+
+    //HP bar
+    ctx.beginPath();
+    ctx.fillStyle = "green";
+    ctx.rect(15, 475, 30, -player.hp);
+    ctx.closePath();
+    ctx.fill();
+
+    //HP bar outline
+    ctx.strokeStyle = 'white';
+    ctx.rect(15, 375, 30, 100);
+    ctx.stroke();
 }
 
 /**
@@ -148,12 +330,26 @@ function render(elapsedTime, ctx) {
   * @param {DOMHighResTimeStamp} elapsedTime
   * @param {CanvasRenderingContext2D} ctx the context to render to
   */
-function renderWorld(elapsedTime, ctx) {
+function renderWorld(elapsedTime, ctx)
+{
+    
+    //Update fps
+    if (timeSinceLastFrame > 1000)
+    {
+        timeSinceLastFrame = 0;
+        fpsDiv.innerHTML = framesThisSecond;
+        framesThisSecond = 0;
+    }
+
     // Render the bullets
     bullets.render(elapsedTime, ctx);
 
+    //Render the lasers
+    lasers.render(elapsedTime, ctx);
+
     // Render the missiles
-    missiles.forEach(function(missile) {
+    missiles.forEach(function (missile)
+    {
       missile.render(elapsedTime, ctx);
     });
 
@@ -167,8 +363,53 @@ function renderWorld(elapsedTime, ctx) {
   * @param {DOMHighResTimeStamp} elapsedTime
   * @param {CanvasRenderingContext2D} ctx
   */
-function renderGUI(elapsedTime, ctx) {
+function renderGUI(elapsedTime, ctx)
+{
   // TODO: Render the GUI
+}
+
+//Creates a fuel function with no parameters
+function Fuel()
+{
+    this.fuelMeter = 7;
+}
+
+//Checks if gas cans are picked up and if the fuel meter needs to be adjusted
+Fuel.prototype.update = function(elapsedTime)
+{
+    //Determine if the fuel meter will need to be adjusted in the next frame
+    if(fiveSeconds > 5000)
+    {
+        this.fuelMeter -= 1;
+    }
+
+    //Check if out of fuel. Game over if so
+    if(this.fuelMeter == 0)
+    {
+        GameOver("You ran out of fuel<br><br>GameOver");
+    }
+}
+
+Fuel.prototype.render = function(ctx)
+{
+    //Warn the player if they are low on fuel
+    if (this.fuelMeter > 2)
+    {
+        ctx.fillStyle = 'gold';
+    }
+    else
+    {
+        ctx.fillStyle = 'red';
+    }
+
+    ctx.beginPath();
+    //Draw fuel remaining
+    for (var i = 0; i < this.fuelMeter; i++)
+    {
+        ctx.rect(42, 668 - (i*11), 7, 9);
+    }
+    ctx.closePath();
+    ctx.fill();
 }
 
 /**
@@ -176,10 +417,12 @@ function renderGUI(elapsedTime, ctx) {
  * Creates a BulletPool of the specified size
  * @param {uint} size the maximum number of bullets to exits concurrently
  */
-function BulletPool(maxSize) {
+function BulletPool(maxSize, fireRate)
+{
   this.pool = new Float32Array(4 * maxSize);
   this.end = 0;
   this.max = maxSize;
+  this.rateOfFire = fireRate;
 }
 
 /**
@@ -189,7 +432,8 @@ function BulletPool(maxSize) {
  * @param {Vector} position where the bullet begins
  * @param {Vector} velocity the bullet's velocity
 */
-BulletPool.prototype.add = function(position, velocity) {
+BulletPool.prototype.add = function (position, velocity)
+{
     if(this.end < this.max) {
         this.pool[4*this.end] = position.x;
         this.pool[4*this.end+1] = position.y;
@@ -212,7 +456,8 @@ BulletPool.prototype.add = function(position, velocity) {
  * @param {function} callback called with the bullet's position,
  * if the return value is true, the bullet is removed from the pool
  */
-BulletPool.prototype.update = function(elapsedTime, callback) {
+BulletPool.prototype.update = function (elapsedTime, callback)
+{
   for(var i = 0; i < this.end; i++){
     // Move the bullet
     this.pool[4*i] += this.pool[4*i+2];
@@ -243,17 +488,124 @@ BulletPool.prototype.update = function(elapsedTime, callback) {
  * @param {DOMHighResTimeStamp} elapsedTime
  * @param {CanvasRenderingContext2D} ctx
  */
-BulletPool.prototype.render = function(elapsedTime, ctx) {
-  // Render the bullets as a single path
+BulletPool.prototype.render = function (elapsedTime, ctx)
+{
+    // Render the bullets 
   ctx.save();
   ctx.beginPath();
-  ctx.fillStyle = "black";
+  ctx.fillStyle = "white";
   for(var i = 0; i < this.end; i++) {
     ctx.moveTo(this.pool[4*i], this.pool[4*i+1]);
     ctx.arc(this.pool[4*i], this.pool[4*i+1], 2, 0, 2*Math.PI);
   }
   ctx.fill();
   ctx.restore();
+}
+
+//Creates a laserPool
+function LaserPool(maxSize)
+{
+    this.pool = new Float32Array(4 * maxSize);
+    this.end = 0;
+    this.max = maxSize;
+    this.laserType = 1;
+    this.fireable = 1;
+    this.cooldown = 1;
+    this.runningCooldown = 0;
+    this.laserColor = 'orange';
+    this.currentMeterHeight = 80;
+}
+
+//Add a laser to the array
+LaserPool.prototype.add = function (position, velocity) {
+    if (this.end < this.max) {
+        this.pool[4 * this.end] = position.x;
+        this.pool[4 * this.end + 1] = position.y;
+        this.pool[4 * this.end + 2] = velocity.x;
+        this.pool[4 * this.end + 3] = velocity.y;
+        this.end++;
+    }
+
+    this.fireable = false;
+    this.runningCooldown = this.cooldown;
+    this.currentMeterHeight = 0;
+}
+
+LaserPool.prototype.newType = function(type)
+{
+    switch (this.laserType)
+    {
+        //Normal laser
+        case 1:
+            this.cooldown = 1;
+            this.laserColor = orange
+            break;
+    }
+}
+//Update laser array and positions and update the HUD meter
+LaserPool.prototype.update = function (elapsedTime, callback)
+{
+    for (var i = 0; i < this.end; i++) {
+        // Move the laser
+        this.pool[4 * i] += this.pool[4 * i + 2];
+        this.pool[4 * i + 1] += this.pool[4 * i + 3];
+        // If a callback was supplied, call it
+        if (callback && callback({
+            x: this.pool[4 * i],
+            y: this.pool[4 * i + 1]
+        })) {
+            // Swap the current and last lasers if we
+            // need to remove the current laser
+            this.pool[4 * i] = this.pool[4 * (this.end - 1)];
+            this.pool[4 * i + 1] = this.pool[4 * (this.end - 1) + 1];
+            this.pool[4 * i + 2] = this.pool[4 * (this.end - 1) + 2];
+            this.pool[4 * i + 3] = this.pool[4 * (this.end - 1) + 3];
+            // Reduce the total number of lasers by 1
+            this.end--;
+            // Reduce our iterator by 1 so that we update the
+            // freshly swapped laser.
+            i--;
+        }
+    }
+}
+
+//Renders the lasers
+LaserPool.prototype.render = function(elapsedTime, ctx)
+{
+    //Render the lasers
+    ctx.save();
+    ctx.beginPath();
+    ctx.fillStyle = this.laserColor;
+   
+    switch(this.laserType)
+    {
+        case 1:
+        for (var i = 0; i < this.end; i++) {
+        ctx.moveTo(this.pool[4 * i], this.pool[4 * i + 1] + 10);
+        ctx.lineTo(this.pool[4 * i] + 10, this.pool[4 * i + 1]);
+        ctx.arc(this.pool[4 * i], this.pool[4 * i + 1], 10, 0, Math.PI, true);
+        break;
+    }
+    }
+    ctx.fill();
+    ctx.restore();
+}
+
+//Render the cooldown meter for the HUD
+LaserPool.prototype.renderMeter = function(ctx)
+{
+    //Render the updated cooldown meter
+    ctx.beginPath();
+    ctx.fillStyle = 'gold';
+    ctx.rect(8, 680, 12, -this.currentMeterHeight);
+    ctx.closePath();
+    ctx.fill();
+
+    //Increase the height as the cooldown decreases over time
+    if (tenthSecond > 100 && this.currentMeterHeight < 80)
+    {
+        this.currentMeterHeight += (8 / this.cooldown);
+    }
 }
 
 /**
@@ -342,7 +694,7 @@ function Game(screen, updateFunction, renderFunction) {
  * @param {bool} pause true to pause, false to start
  */
 Game.prototype.pause = function(flag) {
-  this.paused = (flag == true);
+  this.paused = flag;
 }
 
 /**
@@ -354,6 +706,22 @@ Game.prototype.loop = function(newTime) {
   var game = this;
   var elapsedTime = newTime - this.oldTime;
   this.oldTime = newTime;
+
+    //Check for pauses
+  if (input.p)
+  {
+      input.p = false;
+      if (game.paused)
+      {
+          messageDiv.innerHTML = "";
+          game.pause(false);
+      }
+      else
+      {
+          messageDiv.innerHTML = "<center>Paused</center><br>Press P again to unpause";
+          game.pause(true);
+      }
+  }
 
   if(!this.paused) this.update(elapsedTime);
   this.render(elapsedTime, this.frontCtx);
@@ -436,6 +804,7 @@ const BULLET_SPEED = 10;
  * @param {BulletPool} bullets the bullet pool
  */
 function Player(bullets, missiles) {
+  this.hp = 100;
   this.missiles = missiles;
   this.missileCount = 4;
   this.bullets = bullets;
@@ -453,8 +822,7 @@ function Player(bullets, missiles) {
  * @param {Input} input object defining input, must have
  * boolean properties: up, left, right, down
  */
-Player.prototype.update = function(elapsedTime, input) {
-
+Player.prototype.update = function (elapsedTime, input) {
   // set the velocity
   this.velocity.x = 0;
   if(input.left) this.velocity.x -= PLAYER_SPEED;
@@ -473,7 +841,7 @@ Player.prototype.update = function(elapsedTime, input) {
   this.position.y += this.velocity.y;
 
   // don't let the player move off-screen
-  if(this.position.x < 0) this.position.x = 0;
+  if(this.position.x < 80) this.position.x = 80;
   if(this.position.x > 1024) this.position.x = 1024;
   if(this.position.y > 786) this.position.y = 786;
 }
@@ -690,6 +1058,42 @@ function magnitude(a) {
 function normalize(a) {
   var mag = magnitude(a);
   return {x: a.x / mag, y: a.y / mag};
+}
+
+function UpdateTimers(elapsedTime)
+{
+    //Update tenth-second timer
+    if (tenthSecond > 100)
+    {
+        tenthSecond = 0;
+    }
+    tenthSecond += elapsedTime;
+
+    //Update one second timer
+    if (oneSecond > 1000) {
+        timeOnLevel++;
+        oneSecond = 0;
+
+        if (lasers.runningCooldown > 0) {
+            lasers.runningCooldown--;
+        }
+        else if (lasers.runningCooldown == 0) {
+            lasers.fireable = true;
+        }
+    }
+    oneSecond += elapsedTime;
+
+    //Update five second timer
+    if (fiveSeconds > 5000) {
+        fiveSeconds = 0;
+    }
+    fiveSeconds += elapsedTime;
+}
+
+function GameOver(message)
+{
+    gameOverFlag = true;
+    messageDiv.innerHTML = message;
 }
 
 /**

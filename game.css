@@ -4,3 +4,108 @@ canvas#screen {
   box-shadow: 4px 4px 4px #777;
   position: relative;
 }
+
+#messageDiv {
+	font-size: 45px;
+	color: red;
+	font-weight: bold;
+	position: absolute;
+	top: 285px;
+	left: 285px;
+	z-index: 1;
+}
+
+#fpsDiv {
+    font-size: 15px;
+	color: white;
+    position: absolute;
+    top: 845px;
+    left: 45px;
+    z-index: 1;
+}
+#fps{
+    font-size: 15px;
+	color: green;
+    position: absolute;
+    top: 845px;
+    left: 15px;
+    z-index: 1;
+}
+
+#level {
+    font-size: 18px;
+	color: green;
+    position: absolute;
+    top: 145px;
+    left: 20px;
+    z-index: 1;
+}
+#levelDiv {
+    font-size: 20px;
+	color: white;
+    position: absolute;
+    top: 165px;
+    left: 35px;
+    z-index: 1;
+}
+#score {
+    font-size: 18px;
+	color: green;
+    position: absolute;
+    top: 90px;
+    left: 20px;
+    z-index: 1;
+}
+#scoreDiv {
+    font-size: 20px;
+	color: white;
+    position: absolute;
+    top: 110px;
+    left: 29px;
+    z-index: 1;
+}
+
+#lives {
+    font-size: 18px;
+	color: green;
+    position: absolute;
+    top: 570px;
+    left: 20px;
+    z-index: 1;
+}
+
+#enemiesRemain {
+    font-size: 12px;
+	color: gray;
+    position: absolute;
+    top: 240px;
+    left: 22px;
+    z-index: 1;
+}
+
+#enemiesRemainDiv {
+    font-size: 10px;
+	color: gray;
+    position: absolute;
+    top: 222px;
+    left: 32px;
+    z-index: 1;
+}
+
+#attackSpeed {
+    font-size: 10px;
+	color: gray;
+    position: absolute;
+    top: 312px;
+    left: 15px;
+    z-index: 1;
+}
+
+#instructionsDiv2 {
+    font-size: 15px;
+	color: black;
+    position: absolute;
+    top: 935px;
+    left: 390px;
+    z-index: 1;
+}
