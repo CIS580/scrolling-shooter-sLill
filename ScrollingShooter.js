@@ -15,6 +15,7 @@
 //game
 //missile
 //player
+//Environment
 //smokeparticles
 //scale
 //add
@@ -24,6 +25,7 @@
 //magnitude
 //normalize
 //UpdateTimers
+//NewLevel
 //GameOver
 //masterloop
 
@@ -44,9 +46,12 @@ var oneSecond = 0;
 var fiveSeconds = 0;
 var timeOnLevel = 0;
 var score = 0;
-var level = 1;
+var level = 0;
 var lives = 3;
+var attackSpeed = 1;
+var enemiesRemaining = 25;
 var gameOverFlag = false;
+var newLevelFlag = true;
 var input = {
     up: false,
     down: false,
@@ -57,6 +62,7 @@ var input = {
     p: false
 }
 
+
 //Initialize Objects
 var camera = new Camera(canvas);
 var bullets = new BulletPool(10, 500);
@@ -64,6 +70,7 @@ var lasers = new LaserPool(10);
 var missiles = [];
 var player = new Player(bullets, missiles);
 var fuel = new Fuel();
+var environment = new Environment();
 
 //Initialize Html
 var instructionsDiv = document.getElementById("instructionsDiv");
@@ -71,9 +78,11 @@ instructionsDiv.innerHTML = "<b>W-A-S-D</b> or the arrow keys to move <br><b>Spa
 var instructionsDiv2 = document.getElementById("instructionsDiv2");
 instructionsDiv2.innerHTML = ("&#8226 Each enemy killed boosts your score and increases your attack speed permanently <br>&#8226 Grab powerups to increase weapon strength <br>&#8226 Clear all enemies to advance to the next level <br>&#8226 Run out of fuel or run out of lives and it's game over");
 var messageDiv = document.getElementById("messageDiv");
+var congratsDiv = document.getElementById("congratsDiv");
 var fpsDiv = document.getElementById("fpsDiv");
 var scoreDiv = document.getElementById("scoreDiv");
 var levelDiv = document.getElementById("levelDiv");
+var attackSpeedDiv = document.getElementById("attackSpeedDiv");
 
 /**
  * @function onkeydown
@@ -165,6 +174,14 @@ window.onkeyup = function (event) {
  */
 function update(elapsedTime) {
 
+    //Check for a new level
+    if (newLevelFlag)
+    {
+        NewLevel();
+        congratsDiv.innerHTML = "LEVEL " + level;
+        fiveSeconds = 0;
+    }
+
     //Update FPS counter
     framesThisSecond++;
     timeSinceLastFrame += elapsedTime;
@@ -191,11 +208,13 @@ function update(elapsedTime) {
     }
     timeSinceLastBullet += elapsedTime;
 
-  // update the player
-  player.update(elapsedTime, input);
 
   // update the camera
   camera.update(player.position);
+
+  // update the player
+  player.update(elapsedTime, input);
+
 
   // Update bullets
   bullets.update(elapsedTime, function(bullet){
@@ -216,6 +235,9 @@ function update(elapsedTime) {
     if(Math.abs(missile.position.x - camera.x) > camera.width * 2)
       markedForRemoval.unshift(i);
   });
+
+  environment.update(elapsedTime);
+
   // Remove missiles that have gone off-screen
   markedForRemoval.forEach(function(index){
     missiles.splice(index, 1);
@@ -242,8 +264,8 @@ function update(elapsedTime) {
   */
 function render(elapsedTime, ctx)
 {
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, 1024, 786);
+  //ctx.fillStyle = "black";
+  //ctx.fillRect(0, 0, 1024, 786);
 
   // TODO: Render background
 
@@ -297,6 +319,9 @@ function renderHUD(elapsedTime, ctx)
     //Fuel meter
     fuel.render(ctx);
 
+    //Enemies remaining
+    enemiesRemainDiv.innerHTML = enemiesRemaining;
+
     //2nd Weapon cooldown meter
     lasers.renderMeter(ctx);
 
@@ -321,6 +346,9 @@ function renderHUD(elapsedTime, ctx)
     ctx.strokeStyle = 'white';
     ctx.rect(15, 375, 30, 100);
     ctx.stroke();
+
+    //Attack speed
+    attackSpeedDiv.innerHTML = attackSpeed + "%";
 }
 
 /**
@@ -332,7 +360,9 @@ function renderHUD(elapsedTime, ctx)
   */
 function renderWorld(elapsedTime, ctx)
 {
-    
+    //Render the environment
+    environment.render(elapsedTime, ctx);
+
     //Update fps
     if (timeSinceLastFrame > 1000)
     {
@@ -456,30 +486,31 @@ BulletPool.prototype.add = function (position, velocity)
  * @param {function} callback called with the bullet's position,
  * if the return value is true, the bullet is removed from the pool
  */
-BulletPool.prototype.update = function (elapsedTime, callback)
-{
-  for(var i = 0; i < this.end; i++){
-    // Move the bullet
-    this.pool[4*i] += this.pool[4*i+2];
-    this.pool[4*i+1] += this.pool[4*i+3];
-    // If a callback was supplied, call it
-    if(callback && callback({
-      x: this.pool[4*i],
-      y: this.pool[4*i+1]
-    })) {
-      // Swap the current and last bullet if we
-      // need to remove the current bullet
-      this.pool[4*i] = this.pool[4*(this.end-1)];
-      this.pool[4*i+1] = this.pool[4*(this.end-1)+1];
-      this.pool[4*i+2] = this.pool[4*(this.end-1)+2];
-      this.pool[4*i+3] = this.pool[4*(this.end-1)+3];
-      // Reduce the total number of bullets by 1
-      this.end--;
-      // Reduce our iterator by 1 so that we update the
-      // freshly swapped bullet.
-      i--;
+BulletPool.prototype.update = function (elapsedTime, callback) {
+    for (var i = 0; i < this.end; i++) {
+        // Move the bullet
+        this.pool[4 * i] += this.pool[4 * i + 2];
+        this.pool[4 * i + 1] += this.pool[4 * i + 3];
+
+        // If a callback was supplied, call it
+        if (callback && callback({
+            x: this.pool[4 * i],
+            y: this.pool[4 * i + 1]
+        })) {
+            // Swap the current and last bullet if we
+            // need to remove the current bullet
+            this.pool[4 * i] = this.pool[4 * (this.end - 1)];
+            this.pool[4 * i + 1] = this.pool[4 * (this.end - 1) + 1];
+            this.pool[4 * i + 2] = this.pool[4 * (this.end - 1) + 2];
+            this.pool[4 * i + 3] = this.pool[4 * (this.end - 1) + 3];
+            // Reduce the total number of bullets by 1
+            this.end--;
+            // Reduce our iterator by 1 so that we update the
+            // freshly swapped bullet.
+            i--;
+        }
     }
-  }
+
 }
 
 /**
@@ -614,10 +645,20 @@ LaserPool.prototype.renderMeter = function(ctx)
  * @param {Rect} screen the bounds of the screen
  */
 function Camera(screen) {
-  this.x = 0;
-  this.y = 0;
-  this.width = screen.width;
-  this.height = screen.height;
+    this.x = 0;
+    this.y = 0;
+    this.currentCenterX = 512;
+    this.currentCenterY = 393;
+    this.currentPlayerX = 512;
+    this.currentPlayerY = 393;
+    this.width = screen.width;
+    this.height = screen.height;
+    this.maxVelocity = 10;
+    this.distanceFromPlayer = 0;
+    this.velocity = {
+        x: 0,
+        y: 0
+    };
 }
 
 /**
@@ -625,9 +666,73 @@ function Camera(screen) {
  * Updates the camera based on the supplied target
  * @param {Vector} target what the camera is looking at
  */
-Camera.prototype.update = function(target) {
-  // TODO: Align camera with player
+Camera.prototype.update = function (target) {
+
+    //Camera acceleration
+    var acceleration = {
+        x: 0,
+        y: 0
+    }
+
+    //Determine if the difference in x is bigger or the difference in y
+    var differenceinX = Math.abs(this.currentCenterX - player.position.x);
+    var differenceinY = Math.abs(this.currentCenterY - player.position.y);
+    if (player.position.x > this.currentCenterX) {
+        acceleration.x = -((differenceinX / 1400) * this.maxVelocity);
+    }
+    else if (player.position.x < this.currentCenterX) {
+        acceleration.x = ((differenceinX / 1400) * this.maxVelocity);
+    }
+    if (player.position.y > this.currentCenterY) {
+        acceleration.y = -((differenceinY / canvas.clientHeight) * this.maxVelocity);
+    }
+    else if (player.position.y < this.currentCenterY) {
+        acceleration.y = ((differenceinY / canvas.clientHeight) * this.maxVelocity);
+    }
+
+
+    this.velocity.x = acceleration.x;
+    this.velocity.y = acceleration.y;
+
+    // Movement decay  
+    if (this.velocity.x > -0.6 && this.velocity.x < 0.6) {
+        this.velocity.x = 0;
+    }
+    else if (this.velocity.x > 0) {
+        this.velocity.x -= Math.abs(acceleration.x / 40);
+    }
+    else if (this.velocity.x < 0) {
+        this.velocity.x += Math.abs(acceleration.x / 40);
+    }
+
+    if (this.velocity.y > -0.6 && this.velocity.y < 0.6) {
+        this.velocity.y = 0;
+    }
+    else if (this.velocity.y > 0) {
+        this.velocity.y -= Math.abs(acceleration.y / 40);
+    }
+    else if (this.velocity.y < 0) {
+        this.velocity.y += Math.abs(acceleration.y / 40);
+    }
+
+    this.currentPlayerX += -this.velocity.x;
+    this.currentPlayerY += -this.velocity.y;
+    this.currentCenterX += -this.velocity.x;
+    this.currentCenterY += -this.velocity.y;
+
+    //Check if near an edge
+    if (this.currentPlayerX < 450) {
+        this.velocity.x = -0.005;
+    }
+    else if (this.currentPlayerX > 880) {
+        this.velocity.x = 0.005;
+    }
+
+    // Apply velocity
+    this.x += -this.velocity.x;
+    this.y += (-this.velocity.y);
 }
+
 
 /**
  * @function onscreen
@@ -651,7 +756,7 @@ Camera.prototype.onScreen = function(target) {
  * @return the tranformed coordinates
  */
 Camera.prototype.toScreenCoordinates = function(worldCoordinates) {
-  return Vector.subtract(worldCoordinates, this);
+  return subtract(worldCoordinates, this);
 }
 
 /**
@@ -661,7 +766,7 @@ Camera.prototype.toScreenCoordinates = function(worldCoordinates) {
  * @return the tranformed coordinates
  */
 Camera.prototype.toWorldCoordinates = function(screenCoordinates) {
-  return Vector.add(screenCoordinates, this);
+  return add(screenCoordinates, this);
 }
 
 /**
@@ -809,7 +914,7 @@ function Player(bullets, missiles) {
   this.missileCount = 4;
   this.bullets = bullets;
   this.angle = 0;
-  this.position = {x: 200, y: 200};
+  this.position = {x: 512, y: 393};
   this.velocity = {x: 0, y: 0};
   this.img = new Image()
   this.img.src = 'assets/tyrian.shp.007D3C.Edit.png';
@@ -841,8 +946,8 @@ Player.prototype.update = function (elapsedTime, input) {
   this.position.y += this.velocity.y;
 
   // don't let the player move off-screen
-  if(this.position.x < 80) this.position.x = 80;
-  if(this.position.x > 1024) this.position.x = 1024;
+  if(this.position.x < 20) this.position.x = 20;
+  if(this.position.x > 1350) this.position.x = 1350;
   if(this.position.y > 786) this.position.y = 786;
 }
 
@@ -883,6 +988,156 @@ Player.prototype.fireMissile = function() {
     this.missiles.push(missile);
     this.missileCount--;
   }
+}
+
+//Builds and maintains the environment
+function Environment()
+{
+    this.backgroundLower = new Image();
+    this.backgroundMiddle = new Image();
+    this.backgroundTop = new Image();
+    this.lowerArr = [];
+    this.middleArr = [];
+    this.topArr = [];
+    this.environCanvas = document.getElementById('environCanvas');
+    this.altEnvironCanvas = document.getElementById('altEnvironCanvas');
+    this.focusCanvas = document.getElementById('focusCanvas');
+    this.environCtx = environCanvas.getContext("2d");
+    this.altEnvironCtx = altEnvironCanvas.getContext("2d");
+    this.focusCtx = focusCanvas.getContext("2d");
+    this.timeSinceLastAnimFrame = 0;
+    this.sign = 1;
+    this.environPosition = { x: 0, y: 0 , beenSeen: false};
+    this.altEnvironPosition = { x: 0, y: 0 , beenSeen: false};
+    this.focusPosition = { x: 0, y: 0 , beenSeen: false};
+
+
+    //Initialize to level 1 tiles
+    this.backgroundLower.src = 'assets/TileMaps/OceanTile.png';
+    this.backgroundMiddle.src = 'assets/TileMaps/RainTiles.png';
+    this.backgroundTop.src = 'assets/TileMaps/WoodTile.png';
+    
+}
+
+//Builds and rebuilds the environment
+Environment.prototype.build = function(currentLevel)
+{
+    //Change backgrounds based on the current level
+    switch (currentLevel) {
+        case 1:
+            this.backgroundLower.src = 'assets/TileMaps/OceanTile.png';
+            this.backgroundMiddle.src = 'assets/TileMaps/RainTiles.png';
+            this.backgroundTop.src = 'assets/TileMaps/WoodTile.png';
+            break;
+        case 2:
+            this.backgroundLower.src = 'assets/Life.png';
+            this.backgroundMiddle.src = 'assets/Life.png';
+            this.backgroundTop.src = 'assets/Life.png';
+            break;
+        case 3:
+            this.backgroundLower.src = 'assets/Life.png';
+            this.backgroundMiddle.src = 'assets/Life.png';
+            this.backgroundTop.src = 'assets/Life.png';
+            break;
+    }
+    //Construct the arrays so from the tile maps
+    for(var i = 0; i < 28; i++)
+    {
+        //Build the 2d arrays
+        this.lowerArr[i] = [];
+        this.middleArr[i] = [];
+        this.topArr[i] = [];
+
+        for(var j = 0; j < 28; j++)
+        {
+            this.lowerArr[i] = [0, 0];
+        }
+    }
+}
+
+//Update environment animations and adjust canvas locations
+Environment.prototype.update = function(elapsedTime)
+{
+    //Check if a new canvas has entered the viewing area
+    if (camera.onScreen(this.environCanvas) && this.environPosition.beenSeen == false)
+    {
+        this.environPosition.beenSeen = true;
+    }
+    if (camera.onScreen(this.altEnvironCanvas) && this.altEnvironPosition.beenSeen == false) {
+        this.altEnvironPosition.beenSeen = true;
+    }
+    if (camera.onScreen(this.focusCanvas) && this.focusPosition.beenSeen == false) {
+        this.focusPosition.beenSeen = true;
+    }
+
+    //Check to see if a canvas has left the viewing area
+    if (!camera.onScreen(this.environCanvas) && this.environPosition.beenSeen == true) {
+        ctx.clearRect(clearRect(environPosition.x, environPosition.y, canvas.width, canvas.height));
+        this.environPosition.beenSeen = false;
+        this.environPosition.x = 0;
+        this.environPosition.y = 0;
+    }
+    if (!camera.onScreen(this.altEnvironCanvas) && this.altEnvironPosition.beenSeen == true) {
+        ctx.clearRect(clearRect(altEnvironPosition.x, altEnvironPosition.y, canvas.width, canvas.height));
+        this.altEnvironPosition.beenSeen = false;
+        this.altEnvironPosition.x = 0;
+        this.altEnvironPosition.y = 0;
+    }
+    if (!camera.onScreen(this.focusCanvas) && this.focusPosition.beenSeen == true) {
+        ctx.clearRect(clearRect(focusPosition.x, focusPosition.y, canvas.width, canvas.height));
+        this.focusPosition.beenSeen = false;
+        this.focusPosition.x = 0;
+        this.focusPosition.y = 0;
+    }
+
+    //Sway the ocean if it's level 1
+    if (level == 1 && this.timeSinceLastAnimFrame > 1000)
+    {
+        this.focusPosition.x += (this.sign * 10);
+        this.environPosition.x += (this.sign * 10);
+        this.altEnvironPosition.x += (this.sign * 10);
+        this.sign = this.sign * -1;
+        this.timeSinceLastAnimFrame = 0;
+    }
+
+    //Scroll vertically
+    if(player.position.y < 100)
+    {
+        this.environPosition.y -= player.velocity.y;
+    }
+    this.timeSinceLastAnimFrame += elapsedTime;
+}
+
+//Renders the background to several different canvas so that they may be shifted around
+Environment.prototype.render = function(elapsedTime, ctx)
+{
+    this.timeSinceLastRender = 0;
+
+    var tileLocHeight = 0;
+    var tileLocWidth = 0;
+    //Construct the arrays so from the tile maps
+    for (var i = 0; i < 28; i++) {
+        //Build the 2d arrays
+        this.lowerArr[i] = [];
+        this.middleArr[i] = [];
+        this.topArr[i] = [];
+
+        tileLocWidth = 0;
+        for (var j = 0; j < 28; j++)
+        {
+            //Lower background
+            this.environCtx.drawImage(this.backgroundLower, tileLocHeight, tileLocWidth);
+            tileLocWidth += 50
+        }
+        tileLocHeight += 50;
+    }
+
+    //Draw canvases
+    ctx.clearRect(camera.x, camera.y, canvas.width, canvas.height);
+    ctx.clearRect(this.environPosition.x, this.environPosition.y, canvas.width, canvas.height);
+    ctx.clearRect(this.altEnvironPosition.x, this.altEnvironPosition.y, canvas.width, canvas.height);
+    ctx.drawImage(this.environCanvas, this.environPosition.x, this.environPosition.y);
+    ctx.drawImage(this.environCanvas, this.environPosition.x, this.environPosition.y - 1400);
 }
 
 /**
@@ -1084,10 +1339,19 @@ function UpdateTimers(elapsedTime)
     oneSecond += elapsedTime;
 
     //Update five second timer
-    if (fiveSeconds > 5000) {
+    if (fiveSeconds > 5000)
+    {
         fiveSeconds = 0;
+        congratsDiv.innerHTML = "";
     }
     fiveSeconds += elapsedTime;
+}
+
+function NewLevel()
+{
+    newLevelFlag = false;
+    level++;
+    environment.build(level);
 }
 
 function GameOver(message)
