@@ -189,8 +189,6 @@ function update(elapsedTime) {
     //Update Timers
     UpdateTimers(elapsedTime);
 
-    //Update fuel
-    fuel.update(elapsedTime);
 
     //Determine if a laser should be fired
     if (input.f && lasers.fireable)
@@ -210,7 +208,9 @@ function update(elapsedTime) {
 
 
   // update the camera
-  camera.update(player.position);
+    camera.update(player.position);
+    //Update fuel
+    fuel.update(elapsedTime);
 
   // update the player
   player.update(elapsedTime, input);
@@ -264,11 +264,6 @@ function update(elapsedTime) {
   */
 function render(elapsedTime, ctx)
 {
-  //ctx.fillStyle = "black";
-  //ctx.fillRect(0, 0, 1024, 786);
-
-  // TODO: Render background
-
   // Transform the coordinate system using
   // the camera position BEFORE rendering
   // objects in the world - that way they
@@ -281,10 +276,6 @@ function render(elapsedTime, ctx)
 
   //Render HUD
   renderHUD(elapsedTime, ctx);
-
-  // Render the GUI without transforming the
-  // coordinate system
-  renderGUI(elapsedTime, ctx);
 }
 
 
@@ -313,11 +304,8 @@ function renderHUD(elapsedTime, ctx)
     ctx.rect(40, 600, 12, 80);
     ctx.stroke();
 
-    //Fuel can
-    ctx.drawImage(gasCan, 27, 675);
-
-    //Fuel meter
-    fuel.render(ctx);
+    //Fuel
+    fuel.renderHUD(ctx);
 
     //Enemies remaining
     enemiesRemainDiv.innerHTML = enemiesRemaining;
@@ -371,6 +359,8 @@ function renderWorld(elapsedTime, ctx)
         framesThisSecond = 0;
     }
 
+    fuel.renderObjects(ctx);
+
     // Render the bullets
     bullets.render(elapsedTime, ctx);
 
@@ -387,21 +377,33 @@ function renderWorld(elapsedTime, ctx)
     player.render(elapsedTime, ctx);
 }
 
-/**
-  * @function renderGUI
-  * Renders the game's GUI IN SCREEN COORDINATES
-  * @param {DOMHighResTimeStamp} elapsedTime
-  * @param {CanvasRenderingContext2D} ctx
-  */
-function renderGUI(elapsedTime, ctx)
-{
-  // TODO: Render the GUI
-}
-
 //Creates a fuel function with no parameters
 function Fuel()
 {
+    this.fuelArr = new Float32Array(2 * 20);
     this.fuelMeter = 7;
+    this.fuelSpawn = (Math.floor(Math.random() * 3) + 2) * 1000;
+    this.spawnTimer = 0;
+    this.end = 0;
+}
+
+Fuel.prototype.add = function ()
+{
+    //Insert a fuel can into the array to be rendered in the next frame
+    if (this.end < 20)
+    {
+        this.fuelArr[2 * this.end] = Math.floor(Math.random() * 850) + 35;
+        
+        if (environment.secondRenderY < environment.firstRenderY)
+        {
+            this.fuelArr[2 * this.end + 1] = -1*(Math.floor(Math.random() * (-1*(environment.secondRenderY - 1024)))) - environment.secondRenderY - 1024;
+        }
+        else
+        {
+            this.fuelArr[2 * this.end + 1] = -1*(Math.floor(Math.random() * (-1*(environment.firstRenderY - 1024)))) - environment.firstRenderY - 1024;
+        }
+        this.end++;
+    }
 }
 
 //Checks if gas cans are picked up and if the fuel meter needs to be adjusted
@@ -413,6 +415,14 @@ Fuel.prototype.update = function(elapsedTime)
         this.fuelMeter -= 1;
     }
 
+    if (this.spawnTimer > this.fuelSpawn)
+    {
+        this.spawnTimer = 0;
+        this.fuelSpawn = (Math.floor(Math.random() * 3) + 2) * 1000;
+        this.add();
+    }
+    this.spawnTimer += elapsedTime;
+
     //Check if out of fuel. Game over if so
     if(this.fuelMeter == 0)
     {
@@ -420,7 +430,7 @@ Fuel.prototype.update = function(elapsedTime)
     }
 }
 
-Fuel.prototype.render = function(ctx)
+Fuel.prototype.renderHUD = function(ctx)
 {
     //Warn the player if they are low on fuel
     if (this.fuelMeter > 2)
@@ -432,6 +442,11 @@ Fuel.prototype.render = function(ctx)
         ctx.fillStyle = 'red';
     }
 
+    ctx.save();
+
+    //Fuel can for HUD
+    ctx.drawImage(gasCan, 27, 675);
+
     ctx.beginPath();
     //Draw fuel remaining
     for (var i = 0; i < this.fuelMeter; i++)
@@ -440,6 +455,17 @@ Fuel.prototype.render = function(ctx)
     }
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+}
+
+Fuel.prototype.renderObjects = function(ctx)
+{
+    //Render fuel cans
+    ctx.save();
+    for (var i = 0; i < this.end * 2; i += 2) {
+        ctx.drawImage(gasCan, this.fuelArr[i], this.fuelArr[i + 1]);
+    }
+    ctx.restore();
 }
 
 /**
@@ -741,32 +767,15 @@ Camera.prototype.update = function (target) {
  * @return true if target is on-screen, false if not
  */
 Camera.prototype.onScreen = function(target) {
-    return (
-       target.x > this.x &&
-       target.x < this.x + this.width &&
-       target.y > this.y &&
-       target.y < this.y + this.height
-     );
-}
 
-/**
- * @function toScreenCoordinates
- * Translates world coordinates into screen coordinates
- * @param {Vector} worldCoordinates
- * @return the tranformed coordinates
- */
-Camera.prototype.toScreenCoordinates = function(worldCoordinates) {
-  return subtract(worldCoordinates, this);
-}
+    var isOnScreen = false;
 
-/**
- * @function toWorldCoordinates
- * Translates screen coordinates into world coordinates
- * @param {Vector} screenCoordinates
- * @return the tranformed coordinates
- */
-Camera.prototype.toWorldCoordinates = function(screenCoordinates) {
-  return add(screenCoordinates, this);
+    if (target.x >= this.x && target.x <= this.x + this.width && target.y >= this.y && target.y <= this.y + this.height)
+    {
+        isOnScreen = true;
+    }
+
+    return isOnScreen;
 }
 
 /**
@@ -914,6 +923,7 @@ function Player(bullets, missiles) {
   this.missileCount = 4;
   this.bullets = bullets;
   this.angle = 0;
+  this.startPosition = { x: 512, y: 393 };
   this.position = {x: 512, y: 393};
   this.velocity = {x: 0, y: 0};
   this.img = new Image()
@@ -947,7 +957,7 @@ Player.prototype.update = function (elapsedTime, input) {
 
   // don't let the player move off-screen
   if(this.position.x < 20) this.position.x = 20;
-  if(this.position.x > 1350) this.position.x = 1350;
+  if(this.position.x > 900) this.position.x = 900;
   if(this.position.y > 786) this.position.y = 786;
 }
 
@@ -994,150 +1004,37 @@ Player.prototype.fireMissile = function() {
 function Environment()
 {
     this.backgroundLower = new Image();
+    this.backgroundLower.src = 'assets/TileMaps/Clouds.png';
     this.backgroundMiddle = new Image();
     this.backgroundTop = new Image();
-    this.lowerArr = [];
-    this.middleArr = [];
-    this.topArr = [];
-    this.environCanvas = document.getElementById('environCanvas');
-    this.altEnvironCanvas = document.getElementById('altEnvironCanvas');
-    this.focusCanvas = document.getElementById('focusCanvas');
-    this.environCtx = environCanvas.getContext("2d");
-    this.altEnvironCtx = altEnvironCanvas.getContext("2d");
-    this.focusCtx = focusCanvas.getContext("2d");
-    this.timeSinceLastAnimFrame = 0;
-    this.sign = 1;
-    this.environPosition = { x: 0, y: 0 , beenSeen: false};
-    this.altEnvironPosition = { x: 0, y: 0 , beenSeen: false};
-    this.focusPosition = { x: 0, y: 0 , beenSeen: false};
-
-
-    //Initialize to level 1 tiles
-    this.backgroundLower.src = 'assets/TileMaps/OceanTile.png';
-    this.backgroundMiddle.src = 'assets/TileMaps/RainTiles.png';
-    this.backgroundTop.src = 'assets/TileMaps/WoodTile.png';
-    
+    this.firstRenderY = 0;
+    this.secondRenderY = -1024;
+    this.inFirstBackground = true;
 }
 
-//Builds and rebuilds the environment
-Environment.prototype.build = function(currentLevel)
-{
-    //Change backgrounds based on the current level
-    switch (currentLevel) {
-        case 1:
-            this.backgroundLower.src = 'assets/TileMaps/OceanTile.png';
-            this.backgroundMiddle.src = 'assets/TileMaps/RainTiles.png';
-            this.backgroundTop.src = 'assets/TileMaps/WoodTile.png';
-            break;
-        case 2:
-            this.backgroundLower.src = 'assets/Life.png';
-            this.backgroundMiddle.src = 'assets/Life.png';
-            this.backgroundTop.src = 'assets/Life.png';
-            break;
-        case 3:
-            this.backgroundLower.src = 'assets/Life.png';
-            this.backgroundMiddle.src = 'assets/Life.png';
-            this.backgroundTop.src = 'assets/Life.png';
-            break;
-    }
-    //Construct the arrays so from the tile maps
-    for(var i = 0; i < 28; i++)
-    {
-        //Build the 2d arrays
-        this.lowerArr[i] = [];
-        this.middleArr[i] = [];
-        this.topArr[i] = [];
-
-        for(var j = 0; j < 28; j++)
-        {
-            this.lowerArr[i] = [0, 0];
-        }
-    }
-}
-
-//Update environment animations and adjust canvas locations
+//Update environment animations
 Environment.prototype.update = function(elapsedTime)
 {
-    //Check if a new canvas has entered the viewing area
-    if (camera.onScreen(this.environCanvas) && this.environPosition.beenSeen == false)
+    if (camera.currentCenterY - 393 < this.firstRenderY && camera.currentCenterY - 393 > this.firstRenderY - this.backgroundLower.height && this.inFirstBackground == false)
     {
-        this.environPosition.beenSeen = true;
+        this.secondRenderY -= 2048;
+        this.inFirstBackground = true;
     }
-    if (camera.onScreen(this.altEnvironCanvas) && this.altEnvironPosition.beenSeen == false) {
-        this.altEnvironPosition.beenSeen = true;
-    }
-    if (camera.onScreen(this.focusCanvas) && this.focusPosition.beenSeen == false) {
-        this.focusPosition.beenSeen = true;
-    }
-
-    //Check to see if a canvas has left the viewing area
-    if (!camera.onScreen(this.environCanvas) && this.environPosition.beenSeen == true) {
-        ctx.clearRect(clearRect(environPosition.x, environPosition.y, canvas.width, canvas.height));
-        this.environPosition.beenSeen = false;
-        this.environPosition.x = 0;
-        this.environPosition.y = 0;
-    }
-    if (!camera.onScreen(this.altEnvironCanvas) && this.altEnvironPosition.beenSeen == true) {
-        ctx.clearRect(clearRect(altEnvironPosition.x, altEnvironPosition.y, canvas.width, canvas.height));
-        this.altEnvironPosition.beenSeen = false;
-        this.altEnvironPosition.x = 0;
-        this.altEnvironPosition.y = 0;
-    }
-    if (!camera.onScreen(this.focusCanvas) && this.focusPosition.beenSeen == true) {
-        ctx.clearRect(clearRect(focusPosition.x, focusPosition.y, canvas.width, canvas.height));
-        this.focusPosition.beenSeen = false;
-        this.focusPosition.x = 0;
-        this.focusPosition.y = 0;
-    }
-
-    //Sway the ocean if it's level 1
-    if (level == 1 && this.timeSinceLastAnimFrame > 1000)
+    else if (camera.currentCenterY - 393 < this.secondRenderY && camera.currentCenterY - 393 > this.secondRenderY - this.backgroundLower.height && this.inFirstBackground == true)
     {
-        this.focusPosition.x += (this.sign * 10);
-        this.environPosition.x += (this.sign * 10);
-        this.altEnvironPosition.x += (this.sign * 10);
-        this.sign = this.sign * -1;
-        this.timeSinceLastAnimFrame = 0;
+        this.firstRenderY -= 2048;
+        this.inFirstBackground = false;
     }
-
-    //Scroll vertically
-    if(player.position.y < 100)
-    {
-        this.environPosition.y -= player.velocity.y;
-    }
-    this.timeSinceLastAnimFrame += elapsedTime;
 }
 
 //Renders the background to several different canvas so that they may be shifted around
 Environment.prototype.render = function(elapsedTime, ctx)
 {
-    this.timeSinceLastRender = 0;
-
-    var tileLocHeight = 0;
-    var tileLocWidth = 0;
-    //Construct the arrays so from the tile maps
-    for (var i = 0; i < 28; i++) {
-        //Build the 2d arrays
-        this.lowerArr[i] = [];
-        this.middleArr[i] = [];
-        this.topArr[i] = [];
-
-        tileLocWidth = 0;
-        for (var j = 0; j < 28; j++)
-        {
-            //Lower background
-            this.environCtx.drawImage(this.backgroundLower, tileLocHeight, tileLocWidth);
-            tileLocWidth += 50
-        }
-        tileLocHeight += 50;
-    }
-
-    //Draw canvases
-    ctx.clearRect(camera.x, camera.y, canvas.width, canvas.height);
-    ctx.clearRect(this.environPosition.x, this.environPosition.y, canvas.width, canvas.height);
-    ctx.clearRect(this.altEnvironPosition.x, this.altEnvironPosition.y, canvas.width, canvas.height);
-    ctx.drawImage(this.environCanvas, this.environPosition.x, this.environPosition.y);
-    ctx.drawImage(this.environCanvas, this.environPosition.x, this.environPosition.y - 1400);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.drawImage(this.backgroundLower, -300, this.firstRenderY);
+    ctx.drawImage(this.backgroundLower, 0, this.secondRenderY);
+    ctx.restore();
 }
 
 /**
@@ -1349,9 +1246,9 @@ function UpdateTimers(elapsedTime)
 
 function NewLevel()
 {
+    timeOnLevel = 0;
     newLevelFlag = false;
     level++;
-    environment.build(level);
 }
 
 function GameOver(message)
