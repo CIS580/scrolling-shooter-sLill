@@ -15,15 +15,11 @@
 //game
 //missile
 //player
+//Enemy
 //Environment
-//smokeparticles
-//scale
-//add
-//subtract
+//smokeParticles
+//upgradeParticles
 //rotate
-//dotProduct
-//magnitude
-//normalize
 //UpdateTimers
 //NewLevel
 //GameOver
@@ -49,9 +45,13 @@ var score = 0;
 var level = 0;
 var lives = 3;
 var attackSpeed = 1;
-var enemiesRemaining = 25;
+var enemiesRemaining = 1;
+var maxEnemiesAtOnce = 1;
+var godMode = false;
+var enemiesOnScreen = 0;
 var gameOverFlag = false;
 var newLevelFlag = true;
+var bossSpawned = false;
 var input = {
     up: false,
     down: false,
@@ -65,16 +65,18 @@ var input = {
 
 //Initialize Objects
 var camera = new Camera(canvas);
-var bullets = new BulletPool(10, 500);
+var bullets = new BulletPool(150, 500);
 var lasers = new LaserPool(10);
-var missiles = [];
-var player = new Player(bullets, missiles);
+var player = new Player(bullets);
+var enemies = [];
 var fuel = new Fuel();
 var environment = new Environment();
+var smokeParticles = new SmokeParticles(200);
+var upgradeParticles = new UpgradeParticles(200);
 
 //Initialize Html
 var instructionsDiv = document.getElementById("instructionsDiv");
-instructionsDiv.innerHTML = "<b>W-A-S-D</b> or the arrow keys to move <br><b>Spacebar</b> to fire your primary weapon <br>'<b>F</b>' to fire your secondary weapon <br>'<b>P</b>' to pause the game";
+instructionsDiv.innerHTML = "<b>W-A-S-D</b> or the arrow keys to move <br><b>Spacebar</b> to fire your primary weapon <br>'<b>F</b>' to fire your secondary weapon <br>'<b>P</b>' to pause the game<br><b>'G'</b> for God/Debugging mode";
 var instructionsDiv2 = document.getElementById("instructionsDiv2");
 instructionsDiv2.innerHTML = ("&#8226 Each enemy killed boosts your score and increases your attack speed permanently <br>&#8226 Grab powerups to increase weapon strength <br>&#8226 Clear all enemies to advance to the next level <br>&#8226 Run out of fuel or run out of lives and it's game over");
 var messageDiv = document.getElementById("messageDiv");
@@ -83,6 +85,7 @@ var fpsDiv = document.getElementById("fpsDiv");
 var scoreDiv = document.getElementById("scoreDiv");
 var levelDiv = document.getElementById("levelDiv");
 var attackSpeedDiv = document.getElementById("attackSpeedDiv");
+var godModeDiv = document.getElementById("godModeDiv");
 
 /**
  * @function onkeydown
@@ -97,7 +100,7 @@ window.onkeydown = function(event) {
             break;
         case "ArrowDown":
         case "s":
-            input.down = true;
+            input.down = false;
             event.preventDefault();
             break;
         case "ArrowLeft":
@@ -121,6 +124,12 @@ window.onkeydown = function(event) {
             break;
         case 'p':
             input.p = true;
+            event.preventDefault();
+            break;
+        case 'g':
+            godModeDiv.innerHTML = "GodMode";
+            attackSpeed = 100;
+            godMode = true;
             event.preventDefault();
             break;
     }
@@ -175,7 +184,7 @@ window.onkeyup = function (event) {
 function update(elapsedTime) {
 
     //Check for a new level
-    if (newLevelFlag)
+    if (newLevelFlag == true)
     {
         NewLevel();
         congratsDiv.innerHTML = "LEVEL " + level;
@@ -189,6 +198,19 @@ function update(elapsedTime) {
     //Update Timers
     UpdateTimers(elapsedTime);
 
+    //Determine if an enemy should be spawned
+    if (enemiesOnScreen < maxEnemiesAtOnce && enemiesRemaining > maxEnemiesAtOnce)
+    {
+        enemies[enemiesOnScreen] = new Enemy(level);
+        enemiesOnScreen++;
+    }
+    //Determine if boss should be spawned
+    if (enemiesOnScreen == 0 &&  enemiesRemaining == 1 && bossSpawned == false)
+    {
+        bossSpawned = true;
+        enemies[enemiesOnScreen] = new Enemy(level + 3);
+        enemiesOnScreen++;
+    }
 
     //Determine if a laser should be fired
     if (input.f && lasers.fireable)
@@ -200,21 +222,77 @@ function update(elapsedTime) {
     //Determine if a bullet should be fired
     if (input.space && timeSinceLastBullet > bullets.rateOfFire)
     {
-        var veloc = {x: 0, y: -8};
+        var veloc = {x: 0, y: -10};
         player.bullets.add(player.position, veloc);
         timeSinceLastBullet = 0;
     }
     timeSinceLastBullet += elapsedTime;
 
 
-  // update the camera
+    // update the camera
     camera.update(player.position);
     //Update fuel
     fuel.update(elapsedTime);
 
+    //Update enemies
+    for (var i = 0; i < enemiesOnScreen; i++)
+    {
+        if (enemies[i].hp <= 0)
+        {
+            var xDeath = enemies[i].x;
+            var yDeath = enemies[i].y;
+            smokeParticles.wrapped = true;
+            if (enemies[i].rank > 1)
+            {
+                //Spawn powerup and particles
+                upgradeParticles.xOrigin = 500;
+                upgradeParticles.yOrigin = player.position.y - 400;
+                for (var k = 0; k < upgradeParticles.maxSize / 2; k++) 
+                {
+                    var randX = 500 + (-1 * (Math.floor(Math.random() * 50) + 1));
+                    var randY = (player.position.y - 400) + (-1 * (Math.floor(Math.random() * 50) +1));
+                    upgradeParticles.emit({ x: randX, y: randY });
+                    upgradeParticles.emit({ x: -randX, y: -randY });
+                }
+
+                lasers.upgradeX = upgradeParticles.xOrigin - 25;
+                lasers.upgradeY = player.position.y - 430;
+                score += 450;
+            }
+            var temp = enemies;
+            for (var j = i; j < enemiesOnScreen-1; j++)
+            {
+                enemies[j] = temp[j + 1];
+            }
+            enemies[enemiesOnScreen - 1] = 'undefined';
+            enemiesRemaining--;
+            score += 50;
+            attackSpeed += 1;
+            bullets.rateOfFire = 500 - (500 * (attackSpeed / 100));
+
+            //Smoke Particles
+            for (var k = 0; k < smokeParticles.max/2; k++)
+            {
+                var randX = (xDeath + 50) + (-1 * (Math.floor(Math.random() * 50) + 5));
+                var randY = (yDeath + 50) + (-1 * (Math.floor(Math.random() * 50) + 5));
+                smokeParticles.emit({ x: randX, y: randY });
+                smokeParticles.emit({ x: -randX, y: -randY });
+            }
+            if (bullets.rateOfFire < 0)
+            {
+                bullets.rateOfFire = 1;
+            }
+            enemiesOnScreen--;
+            i--;
+        }
+        else
+        {
+            enemies[i].update(elapsedTime);
+        }
+    }
+
   // update the player
   player.update(elapsedTime, input);
-
 
   // Update bullets
   bullets.update(elapsedTime, function(bullet){
@@ -228,29 +306,37 @@ function update(elapsedTime) {
       return false;
   });
 
-  // Update missiles
-  var markedForRemoval = [];
-  missiles.forEach(function(missile, i){
-    missile.update(elapsedTime);
-    if(Math.abs(missile.position.x - camera.x) > camera.width * 2)
-      markedForRemoval.unshift(i);
-  });
-
+  smokeParticles.update(elapsedTime);
+  upgradeParticles.update(elapsedTime);
   environment.update(elapsedTime);
 
-  // Remove missiles that have gone off-screen
-  markedForRemoval.forEach(function(index){
-    missiles.splice(index, 1);
-  });
 
-  //Check player hp
-  if(player.hp <= 0)
+    //Check player hp
+  if (player.spawnInvincibilityTimer > 0)
+  {
+      player.spawnInvincibilityTimer -= elapsedTime;
+  }
+  if(player.hp <= 0 && player.spawnInvincibilityTimer <= 0)
   {
       lives--;
+      player.spawnInvincibilityTimer = 3000;
+
+      for (var k = 0; k < smokeParticles.max / 2; k++) {
+          var randX = (player.position.x + 45) + (-1 * (Math.floor(Math.random() * 50) + 5));
+          var randY = (player.position.y + 50) + (-1 * (Math.floor(Math.random() * 50) + 5));
+          smokeParticles.emit({ x: randX, y: randY });
+          smokeParticles.emit({ x: -randX, y: -randY });
+      }
+
       //Check if it's game over
       if(lives == 0)
       {
-          GameOver();
+          GameOver("GameOver");
+          player.hp = 0;
+      }
+      else
+      {
+          player.hp = 100;
       }
   }
 }
@@ -268,7 +354,7 @@ function render(elapsedTime, ctx)
   // the camera position BEFORE rendering
   // objects in the world - that way they
   // can be rendered in WORLD cooridnates
-  // but appear in SCREEN coordinates
+    // but appear in SCREEN coordinates
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
   renderWorld(elapsedTime, ctx);
@@ -350,7 +436,6 @@ function renderWorld(elapsedTime, ctx)
 {
     //Render the environment
     environment.render(elapsedTime, ctx);
-
     //Update fps
     if (timeSinceLastFrame > 1000)
     {
@@ -362,16 +447,20 @@ function renderWorld(elapsedTime, ctx)
     fuel.renderObjects(ctx);
 
     // Render the bullets
-    bullets.render(elapsedTime, ctx);
+    bullets.render(elapsedTime, ctx, "white");
 
     //Render the lasers
     lasers.render(elapsedTime, ctx);
 
-    // Render the missiles
-    missiles.forEach(function (missile)
+    //Render the enemies
+    for (var i = 0; i < enemiesOnScreen; i++)
     {
-      missile.render(elapsedTime, ctx);
-    });
+        enemies[i].render(ctx, elapsedTime);
+    }
+
+    //Render Particles
+    smokeParticles.render(elapsedTime, ctx);
+    upgradeParticles.render(ctx, elapsedTime);
 
     // Render the player
     player.render(elapsedTime, ctx);
@@ -396,11 +485,11 @@ Fuel.prototype.add = function ()
         
         if (environment.secondRenderY < environment.firstRenderY)
         {
-            this.fuelArr[2 * this.end + 1] = -1*(Math.floor(Math.random() * (-1*(environment.secondRenderY - 1024)))) - environment.secondRenderY - 1024;
+            this.fuelArr[2 * this.end + 1] = -1*(Math.floor(Math.random() * (-1*(environment.secondRenderY)))) + environment.secondRenderY;
         }
         else
         {
-            this.fuelArr[2 * this.end + 1] = -1*(Math.floor(Math.random() * (-1*(environment.firstRenderY - 1024)))) - environment.firstRenderY - 1024;
+            this.fuelArr[2 * this.end + 1] = -1*(Math.floor(Math.random() * (-1*(environment.firstRenderY)))) + environment.firstRenderY;
         }
         this.end++;
     }
@@ -410,7 +499,7 @@ Fuel.prototype.add = function ()
 Fuel.prototype.update = function(elapsedTime)
 {
     //Determine if the fuel meter will need to be adjusted in the next frame
-    if(fiveSeconds > 5000)
+    if(fiveSeconds > 5000 && godMode == false)
     {
         this.fuelMeter -= 1;
     }
@@ -426,7 +515,56 @@ Fuel.prototype.update = function(elapsedTime)
     //Check if out of fuel. Game over if so
     if(this.fuelMeter == 0)
     {
-        GameOver("You ran out of fuel<br><br>GameOver");
+        lives--;
+        if (lives == 0)
+        {
+            GameOver("You ran out of fuel<br><br>GameOver");
+        }
+        player.hp = 100;
+    }
+
+    //Check if the fuel object has been grabbed or passed by the player
+    var removed = false;
+    for(var i = 0; i < this.end*2; i+=2)
+    {
+        if (removed == true)
+        {
+            removed = false;
+            i -= 2;
+        }
+        //Within X bounds
+        if ((player.position.x > this.fuelArr[i] && player.position.x < (this.fuelArr[i] + 50)) || this.fuelArr[i + 1] > player.position.y + 600)
+        {
+            //Within Y bounds or passed the player
+            if ((player.position.y > this.fuelArr[i + 1] && player.position.y < (this.fuelArr[i + 1] + 50)) || this.fuelArr[i + 1] > player.position.y + 600)
+            {
+                if (player.position.y > this.fuelArr[i + 1] && player.position.y < (this.fuelArr[i + 1] + 50))
+                {
+                    this.fuelMeter = 7;
+                }
+
+                var newArr = new Float32Array(2 * 20);
+                removed = true;
+                var k = 0;
+
+                for(var j = 0; j < this.end*2; j+=2)
+                {                   
+                    //Add all cans to the new array except the one we just hit with our player
+                    if(this.fuelArr[i] != this.fuelArr[j] && this.fuelArr[i+1] != this.fuelArr[j+1])
+                    {                      
+                        newArr[k] = this.fuelArr[j];
+                        newArr[k + 1] = this.fuelArr[j + 1];
+                        k += 2;
+                    }
+                }
+                this.fuelArr = newArr;
+                this.end--;
+            }
+        }
+    }
+    for (var i = 0; i < this.end*2; i+=2)
+    {
+        this.fuelArr[i + 1]++;
     }
 }
 
@@ -545,15 +683,16 @@ BulletPool.prototype.update = function (elapsedTime, callback) {
  * @param {DOMHighResTimeStamp} elapsedTime
  * @param {CanvasRenderingContext2D} ctx
  */
-BulletPool.prototype.render = function (elapsedTime, ctx)
+BulletPool.prototype.render = function (elapsedTime, ctx, color)
 {
     // Render the bullets 
   ctx.save();
   ctx.beginPath();
-  ctx.fillStyle = "white";
+
+  ctx.fillStyle = color;
   for(var i = 0; i < this.end; i++) {
     ctx.moveTo(this.pool[4*i], this.pool[4*i+1]);
-    ctx.arc(this.pool[4*i], this.pool[4*i+1], 2, 0, 2*Math.PI);
+    ctx.arc(this.pool[4*i], this.pool[4*i+1], 4, 0, 2*Math.PI);
   }
   ctx.fill();
   ctx.restore();
@@ -563,6 +702,8 @@ BulletPool.prototype.render = function (elapsedTime, ctx)
 function LaserPool(maxSize)
 {
     this.pool = new Float32Array(4 * maxSize);
+    this.upgradeX = -1;
+    this.upgradeY;
     this.end = 0;
     this.max = maxSize;
     this.laserType = 1;
@@ -571,6 +712,7 @@ function LaserPool(maxSize)
     this.runningCooldown = 0;
     this.laserColor = 'orange';
     this.currentMeterHeight = 80;
+    this.dmg = 3;
 }
 
 //Add a laser to the array
@@ -595,7 +737,8 @@ LaserPool.prototype.newType = function(type)
         //Normal laser
         case 1:
             this.cooldown = 1;
-            this.laserColor = orange
+            this.laserColor = orange;
+            this.dmg = 3;
             break;
     }
 }
@@ -624,6 +767,17 @@ LaserPool.prototype.update = function (elapsedTime, callback)
             i--;
         }
     }
+
+    //Check if any powerups were picked up
+    if(player.position.y < this.upgradeY && enemiesRemaining == 0)
+    {
+        this.upgradeX = -1;
+        this.laserColor = "purple";
+        this.dmg = 5;
+        this.cooldown = 0.5;
+        newLevelFlag = true;
+        //game.paused = true;
+    }
 }
 
 //Renders the lasers
@@ -644,8 +798,29 @@ LaserPool.prototype.render = function(elapsedTime, ctx)
         break;
     }
     }
+    ctx.closePath();
     ctx.fill();
     ctx.restore();
+
+    //Render any powerups
+    if (this.upgradeX > -1)
+    {
+        ctx.beginPath();
+        ctx.moveTo(this.upgradeX, this.upgradeY + 20);
+        ctx.lineTo(this.upgradeX + 20, this.upgradeY);
+        ctx.arc(this.upgradeX, this.upgradeY, 20, 0, Math.PI, true);
+        ctx.closePath();
+        ctx.fillStyle = "purple";
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(this.upgradeX, this.upgradeY + 20);
+        ctx.lineTo(this.upgradeX + 20, this.upgradeY);
+        ctx.arc(this.upgradeX, this.upgradeY, 20, 0, Math.PI, true);
+        ctx.closePath();
+        ctx.strokeStyle = "gold";
+        ctx.stroke();
+    }
 }
 
 //Render the cooldown meter for the HUD
@@ -674,9 +849,9 @@ function Camera(screen) {
     this.x = 0;
     this.y = 0;
     this.currentCenterX = 512;
-    this.currentCenterY = 393;
+    this.currentCenterY = 693;
     this.currentPlayerX = 512;
-    this.currentPlayerY = 393;
+    this.currentPlayerY = 693;
     this.width = screen.width;
     this.height = screen.height;
     this.maxVelocity = 10;
@@ -725,20 +900,20 @@ Camera.prototype.update = function (target) {
         this.velocity.x = 0;
     }
     else if (this.velocity.x > 0) {
-        this.velocity.x -= Math.abs(acceleration.x / 40);
+        this.velocity.x -= Math.abs(acceleration.x / 160);
     }
     else if (this.velocity.x < 0) {
-        this.velocity.x += Math.abs(acceleration.x / 40);
+        this.velocity.x += Math.abs(acceleration.x / 160);
     }
 
     if (this.velocity.y > -0.6 && this.velocity.y < 0.6) {
         this.velocity.y = 0;
     }
     else if (this.velocity.y > 0) {
-        this.velocity.y -= Math.abs(acceleration.y / 40);
+        this.velocity.y -= Math.abs(acceleration.y / 160);
     }
     else if (this.velocity.y < 0) {
-        this.velocity.y += Math.abs(acceleration.y / 40);
+        this.velocity.y += Math.abs(acceleration.y / 160);
     }
 
     this.currentPlayerX += -this.velocity.x;
@@ -756,7 +931,7 @@ Camera.prototype.update = function (target) {
 
     // Apply velocity
     this.x += -this.velocity.x;
-    this.y += (-this.velocity.y);
+    this.y += -1*Math.abs(this.velocity.y);
 }
 
 
@@ -796,6 +971,10 @@ function Game(screen, updateFunction, renderFunction) {
   this.backBuffer.width = screen.width;
   this.backBuffer.height = screen.height;
   this.backCtx = this.backBuffer.getContext('2d');
+  this.pauseCanvas = document.createElement('canvas');
+  this.pauseCanvas.width = screen.width;
+  this.pauseCanvas.height = screen.height;
+  this.pauseCtx = this.pauseCanvas.getContext('2d');
 
   // Start the game loop
   this.oldTime = performance.now();
@@ -828,11 +1007,16 @@ Game.prototype.loop = function(newTime) {
       if (game.paused)
       {
           messageDiv.innerHTML = "";
+          congratsDiv.innerHTML = "";
           game.pause(false);
       }
       else
       {
-          messageDiv.innerHTML = "<center>Paused</center><br>Press P again to unpause";
+          this.pauseCtx.fillStyle = "Orange";
+          this.pauseCtx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+          this.frontCtx.drawImage(this.pauseCanvas, 0, 0);
+          congratsDiv.innerHTML = "Level " + level;
+          messageDiv.innerHTML = "<center>Press P to continue</center><br>Current Score: " + score;
           game.pause(true);
       }
   }
@@ -841,93 +1025,35 @@ Game.prototype.loop = function(newTime) {
   this.render(elapsedTime, this.frontCtx);
 
   // Flip the back buffer
-  this.frontCtx.drawImage(this.backBuffer, 0, 0);
-}
-
-/* Constants */
-const MISSILE_SPEED = 8;
-
-/**
- * @constructor Missile
- * Creates a missile
- * @param {Vector} position the position of the missile
- * @param {Object} target the target of the missile
- */
-function Missile(position, target) {
-  this.position = {x: position.x, y:position.y}
-  this.target = target;
-  this.angle = 0;
-  this.img = new Image()
-  this.img.src = 'assets/helicopter.png';
-  this.smokeParticles = new SmokeParticles(400);
-}
-
-/**
- * @function update
- * Updates the missile, steering it towards a locked
- * target or straight ahead
- * @param {DOMHighResTimeStamp} elapedTime
- */
-Missile.prototype.update = function(elapsedTime) {
-
-  // set the velocity
-  var velocity = {x: MISSILE_SPEED, y: 0}
-  if(this.target) {
-    var direction = Vector.subtract(this.position, this.target);
-    velocity = Vector.scale(Vector.normalize(direction), MISSILE_SPEED);
+  if (!this.paused)
+  {
+      this.frontCtx.drawImage(this.backBuffer, 0, 0);
   }
-
-  // determine missile angle
-  this.angle = Math.atan2(velocity.y, velocity.x);
-
-  // move the missile
-  this.position.x += velocity.x;
-  this.position.y += velocity.y;
-
-  // emit smoke
-  this.smokeParticles.emit(this.position);
-
-  // update smoke
-  this.smokeParticles.update(elapsedTime);
+  else
+  {
+      this.frontCtx.drawImage(this.backBuffer, 0, 0);
+      this.frontCtx.drawImage(this.pauseCanvas, 0, 0);
+  }
 }
 
-/**
- * @function render
- * Renders the missile in world coordinates
- * @param {DOMHighResTimeStamp} elapsedTime
- * @param {CanvasRenderingContext2D} ctx
- */
-Missile.prototype.render = function(elapsedTime, ctx) {
-  // Draw Missile
-  ctx.save();
-  ctx.translate(this.position.x, this.position.y);
-  ctx.rotate(this.angle);
-  ctx.drawImage(this.img, 76, 56, 16, 8, 0, -4, 16, 8);
-  ctx.restore();
-  // Draw Smoke
-  this.smokeParticles.render(elapsedTime, ctx);
-}
-
-/* Constants */
 const PLAYER_SPEED = 5;
-const BULLET_SPEED = 10;
+const BULLET_SPEED = 8;
 
 /**
  * @constructor Player
  * Creates a player
  * @param {BulletPool} bullets the bullet pool
  */
-function Player(bullets, missiles) {
+function Player(bullets) {
   this.hp = 100;
-  this.missiles = missiles;
-  this.missileCount = 4;
   this.bullets = bullets;
   this.angle = 0;
-  this.startPosition = { x: 512, y: 393 };
-  this.position = {x: 512, y: 393};
+  this.startPosition = { x: 512, y: 693 };
+  this.position = {x: 512, y: 693};
   this.velocity = {x: 0, y: 0};
   this.img = new Image()
   this.img.src = 'assets/tyrian.shp.007D3C.Edit.png';
+  this.spawnInvincibilityTimer = 0;
 }
 
 /**
@@ -957,8 +1083,9 @@ Player.prototype.update = function (elapsedTime, input) {
 
   // don't let the player move off-screen
   if(this.position.x < 20) this.position.x = 20;
-  if(this.position.x > 900) this.position.x = 900;
-  if(this.position.y > 786) this.position.y = 786;
+  if(this.position.x > 820) this.position.x = 820;
+  if (this.position.y < camera.currentCenterY - 250) this.position.y = camera.currentCenterY - 250;
+
 }
 
 /**
@@ -970,8 +1097,11 @@ Player.prototype.update = function (elapsedTime, input) {
 Player.prototype.render = function(elapasedTime, ctx) {
   var offset = this.angle * 23;
   ctx.save();
-  ctx.translate(this.position.x, this.position.y);
-  ctx.drawImage(this.img, 48+offset, 57, 23, 27, -12.5, -12, 23, 27);
+  if (this.spawnInvincibilityTimer <= 0)
+  {
+      ctx.translate(this.position.x, this.position.y);
+      ctx.drawImage(this.img, 48 + offset, 57, 23, 27, -12.5, -12, 23, 27);
+  }
   ctx.restore();
 }
 
@@ -986,18 +1116,239 @@ Player.prototype.fireBullet = function(direction) {
   this.bullets.add(position, velocity);
 }
 
-/**
- * @function fireMissile
- * Fires a missile, if the player still has missiles
- * to fire.
- */
-Player.prototype.fireMissile = function() {
-  if(this.missileCount > 0){
-    var position = Vector.add(this.position, {x:0, y:30})
-    var missile = new Missile(position);
-    this.missiles.push(missile);
-    this.missileCount--;
-  }
+
+//Builds a new enemy
+function Enemy(t)
+{
+    this.type = t;
+    this.bullets = new BulletPool(10, 500);
+    this.hp;
+    this.enemyImage = new Image();
+    this.width;
+    this.height;
+    this.x = Math.floor(Math.random() * 800) + 50;
+    this.y = camera.currentCenterY -1300;
+    this.sWidth;
+    this.sHeight;
+    this.sx;
+    this.sy;
+    this.fireRate;
+    this.timeSinceLastShot = 500;
+    this.bulletCount = 0;
+    this.xOffSet;
+    this.yOffSet;
+    this.rank;
+
+    //Next X Coordinate
+    this.gotoX = Math.floor(Math.random() * 800) + 50;;
+
+    switch(this.type)
+    {
+        //Enemy 1
+        case 1:
+            this.enemyImage.src = 'assets/Boss2BadGuy4.png';
+            this.sWidth = 22;
+            this.sHeight = 30;
+            this.sx = 25;
+            this.sy = 57;
+            this.width = 75;
+            this.height = 75;
+            this.fireRate = 1000;
+            this.xOffSet = 40;
+            this.yOffSet = 60;
+            this.hp = 2;
+            this.rank = 1;
+            break;
+        case 2:
+            break;
+        case 3:
+            break;
+            //Boss 1
+        case 4:
+            this.enemyImage.src = 'assets/Boss1.png';
+            this.sWidth = 120;
+            this.sHeight = 138;
+            this.sx = 0;
+            this.sy = 0;
+            this.width = 200;
+            this.height = 200;
+            this.hp = 20;
+            this.rank = 2;
+            this.inStrafe = false;
+            this.roaming = true;
+            this.lasers = 0;
+            this.laserSx = 160;
+            this.laserSy = 140;
+            this.laserSWidth = 30;
+            this.laserSHeight = 110;
+            this.laserWidth = 30;
+            this.laserHeight = 800;
+            break;
+    }
+}
+
+//Update enemy movement and firing
+Enemy.prototype.update = function(elapsedTime)
+{
+    if (this.y < (camera.currentCenterY -693))
+    {
+        this.y += 1.5;
+    }
+    else if (this.y > (camera.currentPlayerY -690))
+    {
+        this.y -= 2.5;
+    }
+    
+    //Make progress towards a random X location
+    if((this.x + 5 > this.gotoX && this.x -5 < this.gotoX) && this.rank == 1)
+    {
+        this.gotoX = Math.floor(Math.random() * 850) + 50;
+    }
+    else
+    {
+        if((this.gotoX - this.x) > 0)
+        {
+            this.x += 1;
+        }
+        else
+        {
+            this.x += -1;
+        }
+    }
+
+    //Determine if a bullet should be fired
+    if (this.timeSinceLastShot > this.fireRate && this.rank == 1)
+    {
+        var veloc = { x: 0, y: 4 };
+        this.bullets.add({ x: (this.x + this.xOffSet), y: (this.y + this.yOffSet) }, veloc);
+        this.timeSinceLastShot = 0;
+        this.bulletCount++;
+    }
+    this.timeSinceLastShot += elapsedTime;
+
+    //Update each bullets position
+    this.bullets.update(elapsedTime, function (bullet) {
+        if (!camera.onScreen(bullet)) return true;
+        return false;
+    });
+
+    //Check for bullet hits
+    for(var j = 0; j < 4* player.bullets.end; j+=4)
+    {
+        if(player.bullets.pool[j] > (this.x ) && player.bullets.pool[j] < (this.x + this.width) && player.bullets.pool[j + 1] < (this.y + this.height) && player.bullets.pool[j+1] > this.y)
+        {
+            player.bullets.pool[j] = player.bullets.pool[3 * player.bullets.end];
+            player.bullets.pool[j + 1] = player.bullets.pool[3 * player.bullets.end + 1];
+            player.bullets.pool[3 * player.bullets.end] = 'undefined';
+            player.bullets.pool[3 * player.bullets.end + 1] = 'undefined';
+            player.bullets.end--;
+            this.hp--;
+            break;
+        }
+    }
+
+    for (var j = 0; j < 4 * lasers.end; j++)
+    {
+       if(lasers.pool[j] > this.x && lasers.pool[j] < (this.x + this.width) && lasers.pool[j + 1] < (this.y + this.height) && lasers.pool[j+1] > this.y)
+        {
+            lasers.pool[j] = lasers.pool[3 * lasers.end];
+            lasers.pool[j + 1] = lasers.pool[3 * lasers.end + 1];
+            lasers.pool[3 * lasers.end] = 'undefined';
+            lasers.pool[3 * lasers.end + 1] = 'undefined';
+            lasers.end--;
+            this.hp -= lasers.dmg;
+            break;
+        }
+    }
+
+    //Check if player is hit
+    for (var j = 0; j < 4 * this.bullets.end; j += 4) {
+        if (this.bullets.pool[j] > (player.position.x) && this.bullets.pool[j] < (player.position.x + 30) && this.bullets.pool[j + 1] < (player.position.y + 40) && this.bullets.pool[j + 1] > player.position.y) {
+            this.bullets.pool[j] = this.bullets.pool[3 * this.bullets.end];
+            this.bullets.pool[j + 1] = this.bullets.pool[3 * this.bullets.end + 1];
+            this.bullets.pool[3 * this.bullets.end] = 'undefined';
+            this.bullets.pool[3 * this.bullets.end + 1] = 'undefined';
+            this.bullets.end--;
+
+            if (godMode == false)
+            {
+                player.hp -= 25;              
+            }
+            break;
+        }
+    }
+
+    //Boss 1 updates
+    if (this.rank == 2 && this.roaming == true && this.inStrafe == false)
+    {
+        this.roaming = false;
+        fiveSeconds = 0;
+        this.side = Math.floor(Math.random() * 2) + 1;
+        if (this.side == 1)
+        {
+            this.gotoX = 40;
+        }
+        else
+        {
+            this.gotoX = 690;
+        }
+        this.sx = 115;
+    }
+    //Boss 1 updates
+    if(this.inStrafe == false && this.roaming == false && this.x == this.gotoX && this.y > player.position.y - 1100)
+    {
+        if(fiveSeconds > 3000)
+        {
+            this.lasers = 1;
+            this.inStrafe = true;
+        }
+    }
+    //Boss 1 updates
+    if(this.inStrafe == true && this.roaming == false && this.lasers == 1)
+    {
+        if (this.side == 1 && this.x < 685)
+        {
+            this.x += 5;
+        }
+        else if (this.side == 2 && this.x > 45)
+        {
+            this.x -= 5;
+        }
+        else
+        {
+            this.lasers = 0;
+            this.roaming = true;
+            this.inStrafe = false;
+        }
+    }
+
+    if(this.rank == 2 && this.lasers == 1 && player.position.x > this.x + 57 && player.position.x < this.x + 97)
+    {
+        if (godMode == false)
+        {
+            player.hp = 0;
+        }
+    }
+
+}
+
+//Renders the enemy unit
+Enemy.prototype.render = function(ctx, elapsedTime)
+{
+    ctx.save();
+    //Render enemy
+    ctx.drawImage(this.enemyImage, this.sx, this.sy, this.sWidth, this.sHeight, this.x, this.y, this.width, this.height);
+
+    //Render bullets
+    this.bullets.render(elapsedTime, ctx, "red");
+    ctx.restore();
+
+    //Boss 1 lasers
+    if(this.lasers == 1)
+    {
+        ctx.drawImage(this.enemyImage, this.laserSx, this.laserSy, this.laserSWidth, this.laserSHeight, this.x + 57, this.y + 190, this.laserWidth, this.laserHeight);
+        ctx.drawImage(this.enemyImage, this.laserSx, this.laserSy, this.laserSWidth, this.laserSHeight, this.x + 97, this.y + 190, this.laserWidth, this.laserHeight);
+    }
 }
 
 //Builds and maintains the environment
@@ -1015,12 +1366,14 @@ function Environment()
 //Update environment animations
 Environment.prototype.update = function(elapsedTime)
 {
-    if (camera.currentCenterY - 393 < this.firstRenderY && camera.currentCenterY - 393 > this.firstRenderY - this.backgroundLower.height && this.inFirstBackground == false)
+    this.firstRenderY++;
+    this.secondRenderY++;
+    if (camera.currentCenterY - 693 < this.firstRenderY && camera.currentCenterY - 693 > this.firstRenderY - this.backgroundLower.height && this.inFirstBackground == false)
     {
         this.secondRenderY -= 2048;
         this.inFirstBackground = true;
     }
-    else if (camera.currentCenterY - 393 < this.secondRenderY && camera.currentCenterY - 393 > this.secondRenderY - this.backgroundLower.height && this.inFirstBackground == true)
+    else if (camera.currentCenterY - 693 < this.secondRenderY && camera.currentCenterY - 693 > this.secondRenderY - this.backgroundLower.height && this.inFirstBackground == true)
     {
         this.firstRenderY -= 2048;
         this.inFirstBackground = false;
@@ -1133,38 +1486,88 @@ SmokeParticles.prototype.render = function(elapsedTime, ctx) {
   }
 }
 
-/**
- * @function rotate
- * Scales a vector
- * @param {Vector} a - the vector to scale
- * @param {float} scale - the scalar to multiply the vector by
- * @returns a new vector representing the scaled original
- */
-function scale(a, scale) {
- return {x: a.x * scale, y: a.y * scale};
+function UpgradeParticles(size)
+{
+    this.maxSize = size;
+    this.pool = new Float32Array(3 * this.maxSize);
+    this.start = 0;
+    this.end = 0;
+    this.wrapped = true;
+    this.color = "yellow";
+    this.xOrigin;
+    this.yOrigin;
 }
 
-/**
- * @function add
- * Computes the sum of two vectors
- * @param {Vector} a the first vector
- * @param {Vector} b the second vector
- * @return the computed sum
-*/
-function add(a, b) {
- return {x: a.x + b.x, y: a.y + b.y};
+UpgradeParticles.prototype.emit = function(position)
+{
+    if (this.end != this.max) {
+        this.pool[3 * this.end] = position.x;
+        this.pool[3 * this.end + 1] = position.y;
+        this.pool[3 * this.end + 2] = 0.0;
+        this.end++;
+    } else {
+        this.pool[3] = position.x;
+        this.pool[4] = position.y;
+        this.pool[5] = 0.0;
+        this.end = 1;
+    }
 }
 
-/**
- * @function subtract
- * Computes the difference of two vectors
- * @param {Vector} a the first vector
- * @param {Vector} b the second vector
- * @return the computed difference
- */
-function subtract(a, b) {
-  return {x: a.x - b.x, y: a.y - b.y};
+UpgradeParticles.prototype.update = function(elapsedTime)
+{
+    function updateParticle(i) {
+        this.pool[3 * i + 2] += elapsedTime;
+        if (this.pool[3 * i + 2] > 5000) this.start = i;
+    }
+    var i;
+    if (this.wrapped) {
+        for (i = 0; i < this.end; i++) {
+            updateParticle.call(this, i);
+        }
+        for (i = this.start; i < this.max; i++) {
+            updateParticle.call(this, i);
+        }      
+    } else {
+        for (i = this.start; i < this.end; i++) {
+            updateParticle.call(this, i);
+        }
+    }
 }
+
+UpgradeParticles.prototype.render = function(ctx, elapsedTime)
+{
+    function renderParticle(i){
+        var alpha = 1 - (this.pool[3*i+2] / 1000);
+         var radius = 0.1 * this.pool[3 * i + 2];
+        if (radius > 5) radius = 5;
+        ctx.beginPath();
+        ctx.arc(
+          this.pool[3 * i],   // X position
+          this.pool[3 * i + 1], // y position
+          radius, // radius
+          0,
+          2 * Math.PI
+        );
+        ctx.fillStyle = 'rgba(204, 204, 0,' + alpha + ')';
+        ctx.fill();
+    }
+
+    // Render the particles individually
+    var i;
+    if(this.wrapped) {
+        for(i = 0; i < this.end; i++){
+            renderParticle.call(this, i);
+        }
+        for(i = this.start; i < this.max; i++){
+            renderParticle.call(this, i);
+        }
+    } else {
+        for(i = this.start; i < this.end; i++) {
+            renderParticle.call(this, i);
+        }
+    }
+}
+
 
 /**
  * @function rotate
@@ -1180,37 +1583,6 @@ function rotate(a, angle) {
   }
 }
 
-/**
- * @function dotProduct
- * Computes the dot product of two vectors
- * @param {Vector} a the first vector
- * @param {Vector} b the second vector
- * @return the computed dot product
- */
-function dotProduct(a, b) {
-  return a.x * b.x + a.y * b.y
-}
-
-/**
- * @function magnitude
- * Computes the magnitude of a vector
- * @param {Vector} a the vector
- * @returns the calculated magnitude
- */
-function magnitude(a) {
-  return Math.sqrt(a.x * a.x + a.y * a.y);
-}
-
-/**
- * @function normalize
- * Normalizes the vector
- * @param {Vector} a the vector to normalize
- * @returns a new vector that is the normalized original
- */
-function normalize(a) {
-  var mag = magnitude(a);
-  return {x: a.x / mag, y: a.y / mag};
-}
 
 function UpdateTimers(elapsedTime)
 {
@@ -1247,8 +1619,11 @@ function UpdateTimers(elapsedTime)
 function NewLevel()
 {
     timeOnLevel = 0;
-    newLevelFlag = false;
     level++;
+    enemiesRemaining = 20 + (5*level);
+    maxEnemiesAtOnce += 2
+    newLevelFlag = false;
+    bossSpawned = false;
 }
 
 function GameOver(message)

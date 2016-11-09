@@ -5,13 +5,23 @@ canvas#screen {
   position: relative;
 }
 
+#godModeDiv{
+    font-size: 14px;
+	color: red;
+	font-weight: bold;
+    position: absolute;
+    top: 400px;
+    left: 13px;
+    z-index: 1;
+}
+
 #messageDiv {
 	font-size: 45px;
 	color: red;
 	font-weight: bold;
 	position: absolute;
 	top: 285px;
-	left: 285px;
+	left: 335px;
 	z-index: 1;
 }
 
